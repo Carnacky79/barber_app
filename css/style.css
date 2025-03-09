@@ -1036,6 +1036,8 @@ a.time-slot {
 	border-radius: var(--border-radius);
 	cursor: pointer;
 	transition: var(--transition);
+	height: 100%;
+	max-height: 100px;
 }
 
 .tab-btn.active {
