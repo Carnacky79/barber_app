@@ -1271,3 +1271,64 @@ a.time-slot {
         flex-wrap: wrap;
     }
 }
+
+/* CSS per il dropdown e il pulsante WhatsApp - Aggiungere in style.css */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-toggle {
+    cursor: pointer;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    right: 0;
+    min-width: 180px;
+    background-color: white;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    z-index: 10;
+    border-radius: 4px;
+    padding: 0.5rem 0;
+}
+
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+
+.dropdown-content a {
+    color: var(--text-color);
+    padding: 0.5rem 1rem;
+    text-decoration: none;
+    display: block;
+    transition: background-color 0.3s;
+}
+
+.dropdown-content a:hover {
+    background-color: var(--bg-light);
+    text-decoration: none;
+}
+
+.btn-whatsapp {
+    background-color: #25D366;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-whatsapp:hover {
+    background-color: #128C7E;
+}
+
+.whatsapp-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}

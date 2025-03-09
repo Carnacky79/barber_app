@@ -163,3 +163,32 @@ function isTimeSlotAvailable($barbiereId, $operatoreId, $data, $oraInizio, $oraF
 
     return true; // Lo slot è disponibile
 }
+
+// Funzione per generare il link WhatsApp
+function generateWhatsAppLink($telefono, $messaggio) {
+    // Rimuovi spazi e caratteri non numerici dal telefono
+    $telefono = preg_replace('/[^0-9]/', '', $telefono);
+
+    // Aggiungi prefisso internazionale se non presente
+    if (substr($telefono, 0, 1) !== '+' && substr($telefono, 0, 2) !== '00') {
+        $telefono = '39' . $telefono; // Prefisso Italia
+    }
+
+    // Codifica il messaggio per URL
+    $messaggio = urlencode($messaggio);
+
+    return "https://wa.me/{$telefono}?text={$messaggio}";
+}
+
+// Funzione per sostituire i segnaposto nei messaggi
+function formatMessage($template, $appuntamento) {
+    $replacements = [
+        '{nome}' => $appuntamento['utente_nome'],
+        '{servizio}' => $appuntamento['servizio_nome'],
+        '{data}' => date('d/m/Y', strtotime($appuntamento['data_appuntamento'])),
+        '{ora}' => date('H:i', strtotime($appuntamento['ora_inizio'])),
+        '{operatore}' => $appuntamento['operatore_nome']
+    ];
+
+    return str_replace(array_keys($replacements), array_values($replacements), $template);
+}

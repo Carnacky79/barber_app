@@ -202,6 +202,21 @@ if (isset($_GET['cancel']) && $_GET['cancel'] > 0) {
     }
 }
 
+// Ottieni messaggi predefiniti dal database
+$stmt = $conn->prepare("SELECT messaggi_predefiniti FROM barbieri WHERE id = ?");
+$stmt->bind_param("i", $_SESSION['barbiere_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+
+// Decodifica i messaggi o usa valori predefiniti
+$messaggi = json_decode($row['messaggi_predefiniti'] ?? '{}', true) ?: [
+    'conferma' => 'Ciao {nome}, il tuo appuntamento per {servizio} è confermato per il {data} alle {ora}. Ti aspettiamo!',
+    'promemoria' => 'Ciao {nome}, ti ricordiamo che hai un appuntamento per {servizio} domani alle {ora}. Ti aspettiamo!',
+    'modifica' => 'Ciao {nome}, il tuo appuntamento è stato modificato. Nuovo appuntamento: {servizio} il {data} alle {ora}.',
+    'cancellazione' => 'Ciao {nome}, il tuo appuntamento del {data} alle {ora} è stato cancellato. Per maggiori informazioni contattaci.'
+];
+
 $conn->close();
 ?>
 <!DOCTYPE html>
@@ -213,141 +228,160 @@ $conn->close();
     <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
-    <?php include 'includes/header.php'; ?>
+<?php include 'includes/header.php'; ?>
 
-    <div class="container">
-        <div class="admin-section">
-            <h1>Gestione Appuntamenti</h1>
+<div class="container">
+    <div class="admin-section">
+        <h1>Gestione Appuntamenti</h1>
 
-            <?php if(isset($error)): ?>
-                <div class="error-message"><?php echo $error; ?></div>
-            <?php endif; ?>
+        <?php if(isset($error)): ?>
+            <div class="error-message"><?php echo $error; ?></div>
+        <?php endif; ?>
 
-            <?php if(isset($success)): ?>
-                <div class="success-message"><?php echo $success; ?></div>
-            <?php endif; ?>
+        <?php if(isset($success)): ?>
+            <div class="success-message"><?php echo $success; ?></div>
+        <?php endif; ?>
 
-            <div class="filters">
-                <form method="get" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" class="filter-form">
-                    <div class="form-group">
-                        <label for="data">Data:</label>
-                        <input type="date" name="data" id="data" value="<?php echo $data; ?>">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="stato">Stato:</label>
-                        <select name="stato" id="stato">
-                            <option value="">Tutti (attivi)</option>
-                            <option value="in attesa" <?php echo $stato === 'in attesa' ? 'selected' : ''; ?>>In attesa</option>
-                            <option value="confermato" <?php echo $stato === 'confermato' ? 'selected' : ''; ?>>Confermato</option>
-                            <option value="completato" <?php echo $stato === 'completato' ? 'selected' : ''; ?>>Completato</option>
-                            <option value="cancellato" <?php echo $stato === 'cancellato' ? 'selected' : ''; ?>>Cancellato</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="operatore_id">Operatore:</label>
-                        <select name="operatore_id" id="operatore_id">
-                            <option value="">Tutti</option>
-                            <?php foreach($operatori as $operatore): ?>
-                                <option value="<?php echo $operatore['id']; ?>" <?php echo $operatore_id === $operatore['id'] ? 'selected' : ''; ?>><?php echo $operatore['nome']; ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <button type="submit" class="btn-primary">Filtra</button>
-                        <a href="appuntamenti.php" class="btn-secondary">Reset</a>
-                    </div>
-                </form>
-
-                <div class="action-buttons">
-                    <a href="nuovo_appuntamento.php" class="btn-primary">Nuovo Appuntamento</a>
+        <div class="filters">
+            <form method="get" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" class="filter-form">
+                <div class="form-group">
+                    <label for="data">Data:</label>
+                    <input type="date" name="data" id="data" value="<?php echo $data; ?>">
                 </div>
+
+                <div class="form-group">
+                    <label for="stato">Stato:</label>
+                    <select name="stato" id="stato">
+                        <option value="">Tutti (attivi)</option>
+                        <option value="in attesa" <?php echo $stato === 'in attesa' ? 'selected' : ''; ?>>In attesa</option>
+                        <option value="confermato" <?php echo $stato === 'confermato' ? 'selected' : ''; ?>>Confermato</option>
+                        <option value="completato" <?php echo $stato === 'completato' ? 'selected' : ''; ?>>Completato</option>
+                        <option value="cancellato" <?php echo $stato === 'cancellato' ? 'selected' : ''; ?>>Cancellato</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="operatore_id">Operatore:</label>
+                    <select name="operatore_id" id="operatore_id">
+                        <option value="">Tutti</option>
+                        <?php foreach($operatori as $operatore): ?>
+                            <option value="<?php echo $operatore['id']; ?>" <?php echo $operatore_id === $operatore['id'] ? 'selected' : ''; ?>><?php echo $operatore['nome']; ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <button type="submit" class="btn-primary">Filtra</button>
+                    <a href="appuntamenti.php" class="btn-secondary">Reset</a>
+                </div>
+            </form>
+
+            <div class="action-buttons">
+                <a href="nuovo_appuntamento.php" class="btn-primary">Nuovo Appuntamento</a>
             </div>
+        </div>
 
-            <div class="appointments-section">
-                <h2>
-                    <?php if($data && !$stato && !$operatore_id): ?>
-                        Appuntamenti del <?php echo date('d/m/Y', strtotime($data)); ?>
-                    <?php elseif($stato && !$data && !$operatore_id): ?>
-                        Appuntamenti <?php echo $stato === 'in attesa' ? 'in attesa di conferma' : ($stato === 'confermato' ? 'confermati' : ($stato === 'completato' ? 'completati' : 'cancellati')); ?>
-                    <?php elseif($operatore_id && !$data && !$stato): ?>
-                        Appuntamenti per <?php
-                            foreach($operatori as $op) {
-                                if($op['id'] == $operatore_id) echo $op['nome'];
-                            }
-                        ?>
-                    <?php else: ?>
-                        Appuntamenti
-                    <?php endif; ?>
-                </h2>
-
-                <?php if(empty($appuntamenti)): ?>
-                    <p>Nessun appuntamento trovato con i filtri selezionati.</p>
+        <div class="appointments-section">
+            <h2>
+                <?php if($data && !$stato && !$operatore_id): ?>
+                    Appuntamenti del <?php echo date('d/m/Y', strtotime($data)); ?>
+                <?php elseif($stato && !$data && !$operatore_id): ?>
+                    Appuntamenti <?php echo $stato === 'in attesa' ? 'in attesa di conferma' : ($stato === 'confermato' ? 'confermati' : ($stato === 'completato' ? 'completati' : 'cancellati')); ?>
+                <?php elseif($operatore_id && !$data && !$stato): ?>
+                    Appuntamenti per <?php
+                    foreach($operatori as $op) {
+                        if($op['id'] == $operatore_id) echo $op['nome'];
+                    }
+                    ?>
                 <?php else: ?>
-                    <div class="appointments-list">
-                        <?php foreach($appuntamenti as $appuntamento): ?>
-                            <div class="appointment-item <?php echo $appuntamento['stato']; ?>">
-                                <div class="appointment-date">
-                                    <?php echo date('d/m/Y', strtotime($appuntamento['data_appuntamento'])); ?>
-                                    <span class="appointment-time">
+                    Appuntamenti
+                <?php endif; ?>
+            </h2>
+
+            <?php if(empty($appuntamenti)): ?>
+                <p>Nessun appuntamento trovato con i filtri selezionati.</p>
+            <?php else: ?>
+                <div class="appointments-list">
+                    <?php foreach($appuntamenti as $appuntamento): ?>
+                        <div class="appointment-item <?php echo $appuntamento['stato']; ?>">
+                            <div class="appointment-date">
+                                <?php echo date('d/m/Y', strtotime($appuntamento['data_appuntamento'])); ?>
+                                <span class="appointment-time">
                                         <?php echo date('H:i', strtotime($appuntamento['ora_inizio'])); ?> -
                                         <?php echo date('H:i', strtotime($appuntamento['ora_fine'])); ?>
                                     </span>
-                                </div>
-                                <div class="appointment-info">
-                                    <h3><?php echo $appuntamento['utente_nome']; ?></h3>
-                                    <p><strong>Tel:</strong> <?php echo $appuntamento['utente_telefono']; ?></p>
-                                    <p><strong>Servizio:</strong> <?php echo $appuntamento['servizio_nome']; ?> (€<?php echo number_format($appuntamento['prezzo'], 2); ?>)</p>
-                                    <p><strong>Operatore:</strong> <?php echo $appuntamento['operatore_nome']; ?></p>
-                                    <?php if (!empty($appuntamento['note'])): ?>
-                                        <p><strong>Note:</strong> <?php echo $appuntamento['note']; ?></p>
+                            </div>
+                            <div class="appointment-info">
+                                <h3><?php echo $appuntamento['utente_nome']; ?></h3>
+                                <p><strong>Tel:</strong> <?php echo $appuntamento['utente_telefono']; ?></p>
+                                <p><strong>Servizio:</strong> <?php echo $appuntamento['servizio_nome']; ?> (€<?php echo number_format($appuntamento['prezzo'], 2); ?>)</p>
+                                <p><strong>Operatore:</strong> <?php echo $appuntamento['operatore_nome']; ?></p>
+                                <?php if (!empty($appuntamento['note'])): ?>
+                                    <p><strong>Note:</strong> <?php echo $appuntamento['note']; ?></p>
+                                <?php endif; ?>
+                            </div>
+                            <div class="appointment-actions">
+                                <?php if ($appuntamento['stato'] === 'in attesa'): ?>
+                                    <a href="appuntamenti.php?confirm=<?php echo $appuntamento['id']; ?>" class="btn-primary">Conferma</a>
+                                <?php endif; ?>
+                                <?php if ($appuntamento['stato'] === 'in attesa' || $appuntamento['stato'] === 'confermato'): ?>
+                                    <a href="modifica_appuntamento.php?id=<?php echo $appuntamento['id']; ?>" class="btn-secondary">Modifica</a>
+                                    <?php if (strtotime($appuntamento['data_appuntamento'] . ' ' . $appuntamento['ora_inizio']) <= time()): ?>
+                                        <a href="appuntamenti.php?complete=<?php echo $appuntamento['id']; ?>" class="btn-secondary">Completa</a>
                                     <?php endif; ?>
-                                </div>
-                                <div class="appointment-actions">
-                                    <?php if ($appuntamento['stato'] === 'in attesa'): ?>
-                                        <a href="appuntamenti.php?confirm=<?php echo $appuntamento['id']; ?>" class="btn-primary">Conferma</a>
-                                    <?php endif; ?>
-                                    <?php if ($appuntamento['stato'] === 'in attesa' || $appuntamento['stato'] === 'confermato'): ?>
-                                        <a href="modifica_appuntamento.php?id=<?php echo $appuntamento['id']; ?>" class="btn-secondary">Modifica</a>
-                                        <?php if (strtotime($appuntamento['data_appuntamento'] . ' ' . $appuntamento['ora_inizio']) <= time()): ?>
-                                            <a href="appuntamenti.php?complete=<?php echo $appuntamento['id']; ?>" class="btn-secondary">Completa</a>
-                                        <?php endif; ?>
-                                        <a href="appuntamenti.php?cancel=<?php echo $appuntamento['id']; ?>" class="btn-danger" onclick="return confirm('Sei sicuro di voler cancellare questo appuntamento?');">Cancella</a>
-                                    <?php endif; ?>
+                                    <a href="appuntamenti.php?cancel=<?php echo $appuntamento['id']; ?>" class="btn-danger" onclick="return confirm('Sei sicuro di voler cancellare questo appuntamento?');">Cancella</a>
+                                <?php endif; ?>
+                                <div class="dropdown">
+                                    <button class="btn-whatsapp dropdown-toggle">
+                                        <i class="fab fa-whatsapp"></i> WhatsApp
+                                    </button>
+                                    <div class="dropdown-content">
+                                        <a href="<?php echo generateWhatsAppLink($appuntamento['utente_telefono'], formatMessage($messaggi['conferma'], $appuntamento)); ?>" target="_blank" class="whatsapp-link">
+                                            <i class="fas fa-check"></i> Conferma
+                                        </a>
+                                        <a href="<?php echo generateWhatsAppLink($appuntamento['utente_telefono'], formatMessage($messaggi['promemoria'], $appuntamento)); ?>" target="_blank" class="whatsapp-link">
+                                            <i class="fas fa-bell"></i> Promemoria
+                                        </a>
+                                        <a href="<?php echo generateWhatsAppLink($appuntamento['utente_telefono'], formatMessage($messaggi['modifica'], $appuntamento)); ?>" target="_blank" class="whatsapp-link">
+                                            <i class="fas fa-edit"></i> Modifica
+                                        </a>
+                                        <a href="<?php echo generateWhatsAppLink($appuntamento['utente_telefono'], formatMessage($messaggi['cancellazione'], $appuntamento)); ?>" target="_blank" class="whatsapp-link">
+                                            <i class="fas fa-times"></i> Cancellazione
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
+</div>
 
-    <?php include 'includes/footer.php'; ?>
+<?php include 'includes/footer.php'; ?>
 
-    <script src="../js/jquery.min.js"></script>
-    <script src="../js/script.js"></script>
+<script src="../js/jquery.min.js"></script>
+<script src="../js/script.js"></script>
 
-    <script>
-        // Script per gestire il cambio di data dinamicamente
-        $(document).ready(function() {
-            // Quando cambia la data, invia il form automaticamente
-            $('#data').change(function() {
-                $(this).closest('form').submit();
-            });
-
-            // Quando cambia lo stato, invia il form automaticamente
-            $('#stato').change(function() {
-                $(this).closest('form').submit();
-            });
-
-            // Quando cambia l'operatore, invia il form automaticamente
-            $('#operatore_id').change(function() {
-                $(this).closest('form').submit();
-            });
+<script>
+    // Script per gestire il cambio di data dinamicamente
+    $(document).ready(function() {
+        // Quando cambia la data, invia il form automaticamente
+        $('#data').change(function() {
+            $(this).closest('form').submit();
         });
-    </script>
+
+        // Quando cambia lo stato, invia il form automaticamente
+        $('#stato').change(function() {
+            $(this).closest('form').submit();
+        });
+
+        // Quando cambia l'operatore, invia il form automaticamente
+        $('#operatore_id').change(function() {
+            $(this).closest('form').submit();
+        });
+    });
+</script>
 </body>
 </html>
