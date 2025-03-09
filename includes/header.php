@@ -279,6 +279,7 @@ if (isLoggedIn()) {
             animation: pulse 2s infinite;
         }
     </style>
+    <script src="<?php echo (isBarbiere() ? '../' : ''); ?>js/notifications.js"></script>
 </head>
 <body>
 <header>
