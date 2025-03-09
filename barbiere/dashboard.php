@@ -118,6 +118,7 @@ $conn->close();
                 <a href="nuovo_appuntamento.php" class="btn-primary">Nuovo appuntamento</a>
                 <a href="orari.php" class="btn-secondary">Gestisci orari</a>
                 <a href="impostazioni.php" class="btn-secondary">Impostazioni</a>
+                <a href="impostazioni_messaggi.php" class="btn-secondary">Messaggi predefiniti</a>
             </div>
         </div>
 

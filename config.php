@@ -164,6 +164,19 @@ function isTimeSlotAvailable($barbiereId, $operatoreId, $data, $oraInizio, $oraF
     return true; // Lo slot è disponibile
 }
 
+// Funzione per sostituire i segnaposto nei messaggi
+function formatMessage($template, $appuntamento) {
+    $replacements = [
+        '{nome}' => $appuntamento['utente_nome'] ?? 'Cliente',
+        '{servizio}' => $appuntamento['servizio_nome'] ?? 'servizio',
+        '{data}' => isset($appuntamento['data_appuntamento']) ? date('d/m/Y', strtotime($appuntamento['data_appuntamento'])) : 'data',
+        '{ora}' => isset($appuntamento['ora_inizio']) ? date('H:i', strtotime($appuntamento['ora_inizio'])) : 'ora',
+        '{operatore}' => $appuntamento['operatore_nome'] ?? 'operatore'
+    ];
+
+    return str_replace(array_keys($replacements), array_values($replacements), $template);
+}
+
 // Funzione per generare il link WhatsApp
 function generateWhatsAppLink($telefono, $messaggio) {
     // Rimuovi spazi e caratteri non numerici dal telefono
@@ -178,17 +191,4 @@ function generateWhatsAppLink($telefono, $messaggio) {
     $messaggio = urlencode($messaggio);
 
     return "https://wa.me/{$telefono}?text={$messaggio}";
-}
-
-// Funzione per sostituire i segnaposto nei messaggi
-function formatMessage($template, $appuntamento) {
-    $replacements = [
-        '{nome}' => $appuntamento['utente_nome'],
-        '{servizio}' => $appuntamento['servizio_nome'],
-        '{data}' => date('d/m/Y', strtotime($appuntamento['data_appuntamento'])),
-        '{ora}' => date('H:i', strtotime($appuntamento['ora_inizio'])),
-        '{operatore}' => $appuntamento['operatore_nome']
-    ];
-
-    return str_replace(array_keys($replacements), array_values($replacements), $template);
 }

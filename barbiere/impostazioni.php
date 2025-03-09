@@ -249,6 +249,19 @@ $conn->close();
                     <a href="dashboard.php" class="btn-secondary">Annulla</a>
                 </div>
             </form>
+
+            <!-- Aggiungiamo qui un box di navigazione per le altre impostazioni -->
+            <div class="additional-settings">
+                <h3>Altre Impostazioni</h3>
+                <div class="settings-links">
+                    <a href="impostazioni_messaggi.php" class="btn-secondary">
+                        <i class="fas fa-comment-dots"></i> Messaggi Predefiniti
+                    </a>
+                    <!-- Qui è possibile aggiungere altri link per future impostazioni -->
+                </div>
+            </div>
+
+
         </div>
     </div>
 </div>
