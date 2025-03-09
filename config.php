@@ -101,67 +101,103 @@ function sendEmail($to, $subject, $message) {
 }
 
 // Funzione per controllare se un orario è disponibile
-function isTimeSlotAvailable($barbiereId, $operatoreId, $data, $oraInizio, $oraFine) {
+/**
+ * Questa funzione verifica se uno slot orario è disponibile per un appuntamento.
+ * Verifica tutte le fasce orarie di apertura del barbiere.
+ * 
+ * @param int $barbiere_id ID del barbiere
+ * @param int $operatore_id ID dell'operatore
+ * @param string $data Data dell'appuntamento (formato Y-m-d)
+ * @param string $ora_inizio Ora di inizio dell'appuntamento (formato H:i:s)
+ * @param string $ora_fine Ora di fine dell'appuntamento (formato H:i:s)
+ * @param int|null $appuntamento_id ID dell'appuntamento da escludere (in caso di modifica)
+ * @return bool True se lo slot è disponibile, false altrimenti
+ */
+function isTimeSlotAvailable($barbiere_id, $operatore_id, $data, $ora_inizio, $ora_fine, $appuntamento_id = null) {
     $conn = connectDB();
-
-    // Controlla se il barbiere è aperto in quel giorno
-    $giornoSettimana = date('N', strtotime($data));
-    $giorniMap = [1 => 'lunedi', 2 => 'martedi', 3 => 'mercoledi', 4 => 'giovedi', 5 => 'venerdi', 6 => 'sabato', 7 => 'domenica'];
-    $giorno = $giorniMap[$giornoSettimana];
-
-    $stmt = $conn->prepare("SELECT * FROM orari_apertura WHERE barbiere_id = ? AND giorno = ? AND aperto = 1");
-    $stmt->bind_param("is", $barbiereId, $giorno);
+    $giorno_settimana = strtolower(date('l', strtotime($data)));
+    $giorni_it = ['monday' => 'lunedi', 'tuesday' => 'martedi', 'wednesday' => 'mercoledi', 
+                 'thursday' => 'giovedi', 'friday' => 'venerdi', 'saturday' => 'sabato', 
+                 'sunday' => 'domenica'];
+    $giorno = $giorni_it[$giorno_settimana];
+    
+    // Verifica che il giorno sia aperto
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) as count FROM orari_apertura 
+        WHERE barbiere_id = ? AND giorno = ? AND aperto = 1
+    ");
+    $stmt->bind_param("is", $barbiere_id, $giorno);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    
+    if ($row['count'] == 0) {
+        // Il barbiere è chiuso in questo giorno
+        return false;
+    }
+    
+    // Verifica se è un giorno di chiusura speciale (ferie, festività, ecc.)
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) as count FROM giorni_chiusura 
+        WHERE barbiere_id = ? AND data_chiusura = ?
+    ");
+    $stmt->bind_param("is", $barbiere_id, $data);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    
+    if ($row['count'] > 0) {
+        // È un giorno di chiusura speciale
+        return false;
+    }
+    
+    // Verifica che lo slot richiesto rientri in almeno una fascia oraria di apertura
+    $slot_in_fascia = false;
+    $stmt = $conn->prepare("
+        SELECT ora_apertura, ora_chiusura FROM orari_apertura 
+        WHERE barbiere_id = ? AND giorno = ? AND aperto = 1
+    ");
+    $stmt->bind_param("is", $barbiere_id, $giorno);
     $stmt->execute();
     $result = $stmt->get_result();
-
-    if ($result->num_rows == 0) {
-        return false; // Il barbiere è chiuso in questo giorno
-    }
-
-    $row = $result->fetch_assoc();
-    if ($oraInizio < $row['ora_apertura'] || $oraFine > $row['ora_chiusura']) {
-        return false; // Fuori dall'orario di apertura
-    }
-
-    // Controlla se è un giorno di chiusura speciale
-    $stmt = $conn->prepare("SELECT * FROM giorni_chiusura WHERE barbiere_id = ? AND data_chiusura = ?");
-    $stmt->bind_param("is", $barbiereId, $data);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    if ($result->num_rows > 0) {
-        return false; // È un giorno di chiusura speciale
-    }
-
-    // Controlla la disponibilità dell'operatore
-    $stmt = $conn->prepare("SELECT * FROM orari_operatori WHERE operatore_id = ? AND giorno = ?");
-    $stmt->bind_param("is", $operatoreId, $giorno);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    $disponibile = false;
+    
     while ($row = $result->fetch_assoc()) {
-        if ($oraInizio >= $row['ora_inizio'] && $oraFine <= $row['ora_fine']) {
-            $disponibile = true;
+        if ($ora_inizio >= $row['ora_apertura'] && $ora_fine <= $row['ora_chiusura']) {
+            $slot_in_fascia = true;
             break;
         }
     }
-
-    if (!$disponibile) {
-        return false; // L'operatore non è disponibile in questo orario
+    
+    if (!$slot_in_fascia) {
+        // Lo slot richiesto non rientra in nessuna fascia oraria di apertura
+        return false;
     }
-
-    // Controlla se ci sono altri appuntamenti che si sovrappongono
-    $stmt = $conn->prepare("SELECT * FROM appuntamenti WHERE operatore_id = ? AND data_appuntamento = ? AND stato IN ('in attesa', 'confermato') AND ((ora_inizio <= ? AND ora_fine > ?) OR (ora_inizio < ? AND ora_fine >= ?) OR (ora_inizio >= ? AND ora_fine <= ?))");
-    $stmt->bind_param("isssssss", $operatoreId, $data, $oraFine, $oraInizio, $oraFine, $oraInizio, $oraInizio, $oraFine);
+    
+    // Verifica che non ci siano sovrapposizioni con altri appuntamenti dell'operatore
+    $query = "
+        SELECT COUNT(*) as count FROM appuntamenti 
+        WHERE barbiere_id = ? AND operatore_id = ? AND data_appuntamento = ? 
+        AND stato IN ('in attesa', 'confermato')
+        AND ((ora_inizio < ? AND ora_fine > ?) OR (ora_inizio < ? AND ora_fine > ?) OR (ora_inizio >= ? AND ora_fine <= ?))
+    ";
+    $params = [$barbiere_id, $operatore_id, $data, $ora_fine, $ora_inizio, $ora_fine, $ora_inizio, $ora_inizio, $ora_fine];
+    $types = "iissssssss";
+    
+    // Escludi l'appuntamento corrente se stiamo modificando un appuntamento esistente
+    if ($appuntamento_id) {
+        $query .= " AND id != ?";
+        $params[] = $appuntamento_id;
+        $types .= "i";
+    }
+    
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param($types, ...$params);
     $stmt->execute();
-    $result = $stmt->get_result();
-
-    if ($result->num_rows > 0) {
-        return false; // C'è già un appuntamento in questo slot
-    }
-
-    return true; // Lo slot è disponibile
+    $row = $stmt->get_result()->fetch_assoc();
+    
+    // Se count è maggiore di 0, significa che c'è una sovrapposizione
+    $is_available = ($row['count'] == 0);
+    
+    $conn->close();
+    return $is_available;
 }
 
 // Funzione per sostituire i segnaposto nei messaggi

@@ -1,5 +1,5 @@
 <?php
-// barbiere/orari.php - Gestione orari di apertura e giorni di chiusura
+// barbiere/orari.php - Gestione orari di apertura e giorni di chiusura (con multiple fasce orarie)
 session_start();
 require_once '../config.php';
 
@@ -17,14 +17,37 @@ $success = '';
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['action'] === 'save_hours' && isset($_POST['csrf_token']) && verifyCSRFToken($_POST['csrf_token'])) {
     $giorni = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
 
+    // Elimina tutti gli orari esistenti
+    $stmt = $conn->prepare("DELETE FROM orari_apertura WHERE barbiere_id = ?");
+    $stmt->bind_param("i", $_SESSION['barbiere_id']);
+    $stmt->execute();
+
+    // Inserisci i nuovi orari
+    $stmt = $conn->prepare("INSERT INTO orari_apertura (barbiere_id, giorno, aperto, ora_apertura, ora_chiusura) VALUES (?, ?, ?, ?, ?)");
+
     foreach ($giorni as $giorno) {
         $aperto = isset($_POST['aperto'][$giorno]) ? 1 : 0;
-        $ora_apertura = $aperto ? $_POST['ora_apertura'][$giorno] : NULL;
-        $ora_chiusura = $aperto ? $_POST['ora_chiusura'][$giorno] : NULL;
-
-        $stmt = $conn->prepare("UPDATE orari_apertura SET aperto = ?, ora_apertura = ?, ora_chiusura = ? WHERE barbiere_id = ? AND giorno = ?");
-        $stmt->bind_param("isssi", $aperto, $ora_apertura, $ora_chiusura, $_SESSION['barbiere_id'], $giorno);
-        $stmt->execute();
+        
+        if ($aperto && isset($_POST['fasce'][$giorno])) {
+            $fasce = $_POST['fasce'][$giorno];
+            
+            foreach ($fasce as $fascia) {
+                if (!empty($fascia['inizio']) && !empty($fascia['fine'])) {
+                    $ora_apertura = $fascia['inizio'];
+                    $ora_chiusura = $fascia['fine'];
+                    
+                    // Inserisci la fascia oraria
+                    $stmt->bind_param("isiss", $_SESSION['barbiere_id'], $giorno, $aperto, $ora_apertura, $ora_chiusura);
+                    $stmt->execute();
+                }
+            }
+        } else {
+            // Se il giorno è chiuso, inserisci comunque un record con aperto=0
+            $ora_apertura = NULL;
+            $ora_chiusura = NULL;
+            $stmt->bind_param("isiss", $_SESSION['barbiere_id'], $giorno, $aperto, $ora_apertura, $ora_chiusura);
+            $stmt->execute();
+        }
     }
 
     $success = "Orari di apertura aggiornati con successo.";
@@ -82,12 +105,24 @@ if (isset($_GET['delete_closure']) && $_GET['delete_closure'] > 0) {
 
 // Ottieni gli orari di apertura
 $orari_apertura = [];
-$stmt = $conn->prepare("SELECT * FROM orari_apertura WHERE barbiere_id = ? ORDER BY FIELD(giorno, 'lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica')");
+$stmt = $conn->prepare("
+    SELECT * FROM orari_apertura 
+    WHERE barbiere_id = ? 
+    ORDER BY FIELD(giorno, 'lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'), ora_apertura
+");
 $stmt->bind_param("i", $_SESSION['barbiere_id']);
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
-    $orari_apertura[$row['giorno']] = $row;
+    if (!isset($orari_apertura[$row['giorno']])) {
+        $orari_apertura[$row['giorno']] = ['aperto' => $row['aperto'], 'fasce' => []];
+    }
+    if ($row['aperto'] && $row['ora_apertura'] && $row['ora_chiusura']) {
+        $orari_apertura[$row['giorno']]['fasce'][] = [
+            'ora_apertura' => $row['ora_apertura'],
+            'ora_chiusura' => $row['ora_chiusura']
+        ];
+    }
 }
 
 // Ottieni i giorni di chiusura futuri
@@ -134,6 +169,9 @@ $conn->close();
 
             <div class="tab-content active" id="orari-apertura">
                 <h2>Orari di Apertura</h2>
+                <p class="form-hint">
+                    Puoi impostare più fasce orarie per ogni giorno (ad esempio: mattina e pomeriggio).
+                </p>
 
                 <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
                     <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
@@ -152,29 +190,43 @@ $conn->close();
                         ];
 
                         foreach ($giorni_it as $giorno_key => $giorno_nome):
-                            $orario = $orari_apertura[$giorno_key] ?? null;
-                            $aperto = $orario ? $orario['aperto'] : false;
-                            $ora_apertura = $orario && $orario['ora_apertura'] ? $orario['ora_apertura'] : '09:00';
-                            $ora_chiusura = $orario && $orario['ora_chiusura'] ? $orario['ora_chiusura'] : '19:00';
+                            $orario = $orari_apertura[$giorno_key] ?? ['aperto' => 0, 'fasce' => []];
+                            $aperto = $orario['aperto'];
                             ?>
-                            <div class="opening-day">
+                            <div class="day-schedule">
                                 <div class="day-header">
                                     <label>
                                         <input type="checkbox" name="aperto[<?php echo $giorno_key; ?>]" class="day-toggle" <?php echo $aperto ? 'checked' : ''; ?>>
                                         <?php echo $giorno_nome; ?>
                                     </label>
                                 </div>
-                                <div class="day-hours <?php echo $aperto ? '' : 'hidden'; ?>">
-                                    <div class="time-inputs">
-                                        <div class="time-input">
-                                            <label for="ora_apertura_<?php echo $giorno_key; ?>">Apertura:</label>
-                                            <input type="time" name="ora_apertura[<?php echo $giorno_key; ?>]" id="ora_apertura_<?php echo $giorno_key; ?>" value="<?php echo substr($ora_apertura, 0, 5); ?>">
-                                        </div>
-                                        <div class="time-input">
-                                            <label for="ora_chiusura_<?php echo $giorno_key; ?>">Chiusura:</label>
-                                            <input type="time" name="ora_chiusura[<?php echo $giorno_key; ?>]" id="ora_chiusura_<?php echo $giorno_key; ?>" value="<?php echo substr($ora_chiusura, 0, 5); ?>">
-                                        </div>
+                                <div class="day-slots <?php echo $aperto ? '' : 'hidden'; ?>">
+                                    <div class="slots-container" id="slots-<?php echo $giorno_key; ?>">
+                                        <?php if (empty($orario['fasce'])): ?>
+                                            <!-- Fascia oraria predefinita -->
+                                            <div class="time-slot">
+                                                <div class="slot-inputs">
+                                                    <input type="time" name="fasce[<?php echo $giorno_key; ?>][0][inizio]" value="09:00">
+                                                    <span>-</span>
+                                                    <input type="time" name="fasce[<?php echo $giorno_key; ?>][0][fine]" value="19:00">
+                                                </div>
+                                                <button type="button" class="btn-danger remove-slot">Rimuovi</button>
+                                            </div>
+                                        <?php else: ?>
+                                            <?php foreach ($orario['fasce'] as $i => $fascia): ?>
+                                                <div class="time-slot">
+                                                    <div class="slot-inputs">
+                                                        <input type="time" name="fasce[<?php echo $giorno_key; ?>][<?php echo $i; ?>][inizio]" value="<?php echo substr($fascia['ora_apertura'], 0, 5); ?>">
+                                                        <span>-</span>
+                                                        <input type="time" name="fasce[<?php echo $giorno_key; ?>][<?php echo $i; ?>][fine]" value="<?php echo substr($fascia['ora_chiusura'], 0, 5); ?>">
+                                                    </div>
+                                                    <button type="button" class="btn-danger remove-slot">Rimuovi</button>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
                                     </div>
+
+                                    <button type="button" class="btn-secondary add-slot" data-day="<?php echo $giorno_key; ?>">Aggiungi fascia oraria</button>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -254,12 +306,98 @@ $conn->close();
 
         // Gestione toggle orari
         $('.day-toggle').change(function() {
-            const dayHours = $(this).closest('.opening-day').find('.day-hours');
+            const daySlots = $(this).closest('.day-schedule').find('.day-slots');
             if ($(this).is(':checked')) {
-                dayHours.removeClass('hidden');
+                daySlots.removeClass('hidden');
             } else {
-                dayHours.addClass('hidden');
+                daySlots.addClass('hidden');
             }
+        });
+        
+        // Rimuovi fascia oraria
+        $(document).on('click', '.remove-slot', function() {
+            const slotsContainer = $(this).closest('.slots-container');
+            const slotCount = slotsContainer.find('.time-slot').length;
+            
+            // Impedisci la rimozione se è l'unica fascia oraria
+            if (slotCount <= 1) {
+                alert('Deve esserci almeno una fascia oraria per i giorni aperti.');
+                return;
+            }
+            
+            $(this).closest('.time-slot').remove();
+
+            // Aggiorna gli indici
+            slotsContainer.find('.time-slot').each(function(index) {
+                const day = slotsContainer.attr('id').replace('slots-', '');
+                $(this).find('input').each(function() {
+                    const name = $(this).attr('name');
+                    const newName = name.replace(/fasce\[([^\]]+)\]\[\d+\]/, `fasce[$1][${index}]`);
+                    $(this).attr('name', newName);
+                });
+            });
+        });
+
+        // Aggiungi fascia oraria
+        $('.add-slot').click(function() {
+            const day = $(this).data('day');
+            const slotsContainer = $(`#slots-${day}`);
+            const slotCount = slotsContainer.find('.time-slot').length;
+
+            const newSlot = `
+                <div class="time-slot">
+                    <div class="slot-inputs">
+                        <input type="time" name="fasce[${day}][${slotCount}][inizio]" value="09:00">
+                        <span>-</span>
+                        <input type="time" name="fasce[${day}][${slotCount}][fine]" value="19:00">
+                    </div>
+                    <button type="button" class="btn-danger remove-slot">Rimuovi</button>
+                </div>
+            `;
+
+            slotsContainer.append(newSlot);
+        });
+        
+        // Validazione orari sovrapposizione
+        $('form').on('submit', function() {
+            let valid = true;
+            
+            $('.day-toggle:checked').each(function() {
+                const day = $(this).attr('name').match(/aperto\[(.*?)\]/)[1];
+                const slots = $(`#slots-${day}`).find('.time-slot');
+                const times = [];
+                
+                // Raccogli tutti gli orari
+                slots.each(function() {
+                    const startInput = $(this).find('input[name*="[inizio]"]');
+                    const endInput = $(this).find('input[name*="[fine]"]');
+                    const start = startInput.val();
+                    const end = endInput.val();
+                    
+                    if (start >= end) {
+                        alert(`L'ora di inizio deve essere precedente all'ora di fine (${day}).`);
+                        startInput.focus();
+                        valid = false;
+                        return false;
+                    }
+                    
+                    times.push({ start, end });
+                });
+                
+                // Verifica sovrapposizioni
+                for (let i = 0; i < times.length; i++) {
+                    for (let j = i + 1; j < times.length; j++) {
+                        if ((times[i].start < times[j].end && times[i].end > times[j].start) ||
+                            (times[j].start < times[i].end && times[j].end > times[i].start)) {
+                            alert(`Ci sono orari sovrapposti per ${day}.`);
+                            valid = false;
+                            return false;
+                        }
+                    }
+                }
+            });
+            
+            return valid;
         });
     });
 </script>

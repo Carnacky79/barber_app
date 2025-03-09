@@ -292,12 +292,21 @@ if (isBarbiere()) {
             <?php if (isBarbiere()): ?>
                 <li><a href="dashboard.php" class="<?php echo $current_page === 'dashboard.php' ? 'active' : ''; ?>">Dashboard</a></li>
                 <li><a href="appuntamenti.php" class="<?php echo $current_page === 'appuntamenti.php' ? 'active' : ''; ?>">Appuntamenti</a></li>
+                <li><a href="calendario.php" class="<?php echo $current_page === 'calendario.php' ? 'active' : ''; ?>">Calendario</a></li>
                 <li><a href="operatori.php" class="<?php echo $current_page === 'operatori.php' ? 'active' : ''; ?>">Operatori</a></li>
                 <li><a href="servizi.php" class="<?php echo $current_page === 'servizi.php' ? 'active' : ''; ?>">Servizi</a></li>
                 <li><a href="orari.php" class="<?php echo $current_page === 'orari.php' ? 'active' : ''; ?>">Orari</a></li>
 
-                <!-- Campanella notifiche -->
-                <li class="notification-bell" id="notification-bell">
+                
+
+                <li><a href="impostazioni.php" class="<?php echo $current_page === 'impostazioni.php' ? 'active' : ''; ?>">Impostazioni</a></li>
+                <li><a href="../logout.php">Esci</a></li>
+            <?php else: ?>
+                <li><a href="../login.php">Accedi</a></li>
+            <?php endif; ?>
+
+            <!-- Campanella notifiche -->
+            <li class="notification-bell" id="notification-bell">
                     <i class="fas fa-bell"></i>
                     <?php if ($unread_notifications_count > 0): ?>
                         <span class="notification-badge"><?php echo $unread_notifications_count; ?></span>
@@ -320,12 +329,6 @@ if (isBarbiere()) {
                         </div>
                     </div>
                 </li>
-
-                <li><a href="impostazioni.php" class="<?php echo $current_page === 'impostazioni.php' ? 'active' : ''; ?>">Impostazioni</a></li>
-                <li><a href="../logout.php">Esci</a></li>
-            <?php else: ?>
-                <li><a href="../login.php">Accedi</a></li>
-            <?php endif; ?>
         </ul>
     </div>
 </header>

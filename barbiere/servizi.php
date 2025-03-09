@@ -37,6 +37,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['csrf_token']) && verif
     $nome = sanitizeInput($_POST['nome']);
     $descrizione = sanitizeInput($_POST['descrizione'] ?? '');
     $prezzo = floatval($_POST['prezzo']);
+    $colore = sanitizeInput($_POST['colore'] ?? '#0066cc');
     $durata_minuti = intval($_POST['durata_minuti']);
 
     if (isset($_POST['servizio_id']) && $_POST['servizio_id'] > 0) {
@@ -50,8 +51,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['csrf_token']) && verif
         $result = $stmt->get_result();
 
         if ($result->num_rows == 1) {
-            $stmt = $conn->prepare("UPDATE servizi SET nome = ?, descrizione = ?, prezzo = ?, durata_minuti = ? WHERE id = ?");
-            $stmt->bind_param("ssdii", $nome, $descrizione, $prezzo, $durata_minuti, $servizio_id);
+            $stmt = $conn->prepare("UPDATE servizi SET nome = ?, descrizione = ?, prezzo = ?, durata_minuti = ?, colore = ? WHERE id = ?");
+            $stmt->bind_param("ssdisi", $nome, $descrizione, $prezzo, $durata_minuti, $colore, $servizio_id);
 
             if ($stmt->execute()) {
                 $success = "Servizio aggiornato con successo.";
@@ -63,8 +64,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['csrf_token']) && verif
         }
     } else {
         // Nuovo servizio
-        $stmt = $conn->prepare("INSERT INTO servizi (barbiere_id, nome, descrizione, prezzo, durata_minuti) VALUES (?, ?, ?, ?, ?)");
-        $stmt->bind_param("issdi", $_SESSION['barbiere_id'], $nome, $descrizione, $prezzo, $durata_minuti);
+        $stmt = $conn->prepare("INSERT INTO servizi (barbiere_id, nome, descrizione, prezzo, durata_minuti, colore) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("issdis", $_SESSION['barbiere_id'], $nome, $descrizione, $prezzo, $durata_minuti, $colore);
 
         if ($stmt->execute()) {
             $success = "Servizio aggiunto con successo.";
@@ -151,6 +152,12 @@ $conn->close();
                     <div class="form-group">
                         <label for="durata_minuti">Durata (minuti):</label>
                         <input type="number" min="5" step="5" name="durata_minuti" id="durata_minuti" required value="<?php echo $servizio ? $servizio['durata_minuti'] : '30'; ?>">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="colore">Colore:</label>
+                        <input type="color" name="colore" id="colore" value="<?php echo $servizio ? $servizio['colore'] : '#0066cc'; ?>">
+                        <p class="form-hint">Colore utilizzato per identificare questo servizio nel calendario</p>
                     </div>
 
                     <div class="form-group">
