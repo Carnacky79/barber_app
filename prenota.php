@@ -137,7 +137,6 @@ switch ($step) {
             $step = 1;
             break;
         }
-
         // Verifica che servizio, operatore e data siano validi
         $stmt = $conn->prepare("
             SELECT s.*, o.nome as operatore_nome

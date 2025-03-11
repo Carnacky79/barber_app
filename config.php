@@ -1,10 +1,16 @@
 <?php
 // config.php - File di configurazione
-define('DB_SERVER', 'localhost');
-define('DB_USERNAME', 'root');
-define('DB_PASSWORD', 'password');
-define('DB_NAME', 'barber_booking');
-define('SITE_URL', 'http://easyapp.local.com'); // Modificare con l'URL del tuo sito
+define('DB_SERVER', 'sql.easybarber.it');
+define('DB_USERNAME', 'easybarb97941');
+define('DB_PASSWORD', 'easy51841');
+define('DB_NAME', 'easybarb97941');
+define('SITE_URL', 'http://easybarber.it'); // Modificare con l'URL del tuo sito
+
+//define('DB_SERVER', 'localhost');
+//define('DB_USERNAME', 'root');
+//define('DB_PASSWORD', 'password');
+//define('DB_NAME', 'barber_booking');
+//define('SITE_URL', 'http://easyapp.local.com'); // Modificare con l'URL del tuo sito
 
 // Connessione al database
 function connectDB() {
@@ -114,13 +120,26 @@ function sendEmail($to, $subject, $message) {
  * @return bool True se lo slot è disponibile, false altrimenti
  */
 function isTimeSlotAvailable($barbiere_id, $operatore_id, $data, $ora_inizio, $ora_fine, $appuntamento_id = null) {
+
+    $barbiere_id = intval($barbiere_id);
+    $operatore_id = intval($operatore_id);
+// Assicurati che data e orari siano nel formato corretto
+    $data = date('Y-m-d', strtotime($data));
+    $ora_inizio = date('H:i:s', strtotime($ora_inizio));
+    $ora_fine = date('H:i:s', strtotime($ora_fine));
+
     $conn = connectDB();
+
+    // Debug - rimuovere o commentare in produzione
+    //echo("isTimeSlotAvailable: barbiere=$barbiere_id, operatore=$operatore_id, data=$data, inizio=$ora_inizio, fine=$ora_fine");
+
+
     $giorno_settimana = strtolower(date('l', strtotime($data)));
-    $giorni_it = ['monday' => 'lunedi', 'tuesday' => 'martedi', 'wednesday' => 'mercoledi', 
-                 'thursday' => 'giovedi', 'friday' => 'venerdi', 'saturday' => 'sabato', 
-                 'sunday' => 'domenica'];
+    $giorni_it = ['monday' => 'lunedi', 'tuesday' => 'martedi', 'wednesday' => 'mercoledi',
+        'thursday' => 'giovedi', 'friday' => 'venerdi', 'saturday' => 'sabato',
+        'sunday' => 'domenica'];
     $giorno = $giorni_it[$giorno_settimana];
-    
+
     // Verifica che il giorno sia aperto
     $stmt = $conn->prepare("
         SELECT COUNT(*) as count FROM orari_apertura 
@@ -129,13 +148,14 @@ function isTimeSlotAvailable($barbiere_id, $operatore_id, $data, $ora_inizio, $o
     $stmt->bind_param("is", $barbiere_id, $giorno);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
-    
+
     if ($row['count'] == 0) {
-        // Il barbiere è chiuso in questo giorno
+        error_log("Il barbiere è chiuso in questo giorno");
+        $conn->close();
         return false;
     }
-    
-    // Verifica se è un giorno di chiusura speciale (ferie, festività, ecc.)
+
+    // Verifica se è un giorno di chiusura speciale
     $stmt = $conn->prepare("
         SELECT COUNT(*) as count FROM giorni_chiusura 
         WHERE barbiere_id = ? AND data_chiusura = ?
@@ -143,13 +163,21 @@ function isTimeSlotAvailable($barbiere_id, $operatore_id, $data, $ora_inizio, $o
     $stmt->bind_param("is", $barbiere_id, $data);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
-    
+
     if ($row['count'] > 0) {
-        // È un giorno di chiusura speciale
+        error_log("È un giorno di chiusura speciale");
+        $conn->close();
         return false;
     }
-    
-    // Verifica che lo slot richiesto rientri in almeno una fascia oraria di apertura
+
+    // Verifica che lo slot rientri in almeno una fascia oraria
+    // Converte gli orari in timestamp per un confronto corretto
+    $inizio_timestamp = strtotime("1970-01-01 " . $ora_inizio);
+    $fine_timestamp = strtotime("1970-01-01 " . $ora_fine);
+
+
+
+
     $slot_in_fascia = false;
     $stmt = $conn->prepare("
         SELECT ora_apertura, ora_chiusura FROM orari_apertura 
@@ -158,44 +186,72 @@ function isTimeSlotAvailable($barbiere_id, $operatore_id, $data, $ora_inizio, $o
     $stmt->bind_param("is", $barbiere_id, $giorno);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     while ($row = $result->fetch_assoc()) {
-        if ($ora_inizio >= $row['ora_apertura'] && $ora_fine <= $row['ora_chiusura']) {
+        $apertura_timestamp = strtotime("1970-01-01 " . $row['ora_apertura']);
+        $chiusura_timestamp = strtotime("1970-01-01 " . $row['ora_chiusura']);
+        if ($inizio_timestamp >= $apertura_timestamp && $fine_timestamp <= $chiusura_timestamp) {
             $slot_in_fascia = true;
             break;
         }
     }
-    
+
+
     if (!$slot_in_fascia) {
-        // Lo slot richiesto non rientra in nessuna fascia oraria di apertura
+        error_log("Lo slot non rientra in nessuna fascia oraria");
+        $conn->close();
         return false;
     }
-    
-    // Verifica che non ci siano sovrapposizioni con altri appuntamenti dell'operatore
+
+    // Verifica sovrapposizioni con altri appuntamenti
     $query = "
-        SELECT COUNT(*) as count FROM appuntamenti 
-        WHERE barbiere_id = ? AND operatore_id = ? AND data_appuntamento = ? 
-        AND stato IN ('in attesa', 'confermato')
-        AND ((ora_inizio < ? AND ora_fine > ?) OR (ora_inizio < ? AND ora_fine > ?) OR (ora_inizio >= ? AND ora_fine <= ?))
-    ";
-    $params = [$barbiere_id, $operatore_id, $data, $ora_fine, $ora_inizio, $ora_fine, $ora_inizio, $ora_inizio, $ora_fine];
-    $types = "iissssssss";
-    
-    // Escludi l'appuntamento corrente se stiamo modificando un appuntamento esistente
+    SELECT COUNT(*) as count FROM appuntamenti 
+    WHERE barbiere_id = ? AND operatore_id = ? AND data_appuntamento = ? 
+    AND stato IN ('in attesa', 'confermato')
+    AND (
+        (? > ora_inizio AND ? < ora_fine) OR
+        (? > ora_inizio AND ? < ora_fine) OR
+        (? <= ora_inizio AND ? >= ora_fine)
+    )
+";
+
+    $params = [
+        $barbiere_id,
+        $operatore_id,
+        $data,
+        $ora_inizio,
+        $ora_inizio,
+        $ora_fine,
+        $ora_fine,
+        $ora_inizio,
+        $ora_fine
+    ];
+    $types = "iisssssss";
+
     if ($appuntamento_id) {
         $query .= " AND id != ?";
         $params[] = $appuntamento_id;
         $types .= "i";
     }
-    
+try{
     $stmt = $conn->prepare($query);
     $stmt->bind_param($types, ...$params);
     $stmt->execute();
+
     $row = $stmt->get_result()->fetch_assoc();
-    
-    // Se count è maggiore di 0, significa che c'è una sovrapposizione
+} catch (Exception $e) {
+    error_log("Errore SQL in isTimeSlotAvailable: " . $e->getMessage());
+    $conn->close();
+    return false;
+}
+
+
     $is_available = ($row['count'] == 0);
-    
+
+    if (!$is_available) {
+        error_log("C'è una sovrapposizione con un altro appuntamento");
+    }
+
     $conn->close();
     return $is_available;
 }
