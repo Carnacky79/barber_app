@@ -105,16 +105,43 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             font-size: 1.2rem;
             margin: 0;
         }
+
+        #login-form {
+            display: none; /* Nascondi il form all'inizio */
+        }
+
+        .selection-prompt {
+            text-align: center;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .form-links {
+            margin-top: 1rem;
+        }
+
+        .back-button {
+            display: inline-block;
+            margin-right: 10px;
+            color: var(--primary-color);
+            cursor: pointer;
+        }
+
+        .back-button:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <div class="auth-form">
+    <div class="auth-form" style="display:flex;flex-direction:column;align-items:center;">
         <h2>Accedi a BarberBook</h2>
 
         <?php if($error): ?>
             <div class="error-message"><?php echo $error; ?></div>
         <?php endif; ?>
+
+        <p class="selection-prompt">Seleziona il tipo di account:</p>
 
         <div class="user-type-selection">
             <div class="type-option" data-type="utente">
@@ -127,9 +154,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
         </div>
 
-        <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" id="login-form">
+        <form method="post" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" id="login-form" style="width:100%; flex-direction:column;align-items:center;">
             <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
             <input type="hidden" name="tipo" id="tipo-input" value="utente">
+
+            <span class="back-button" id="back-to-selection">← Torna alla selezione</span>
 
             <div class="form-group">
                 <label for="email">Email:</label>
@@ -145,8 +174,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <button type="submit" class="btn-primary">Accedi</button>
             </div>
 
-            <div class="form-links">
-                <a href="register.php">Non hai un account? Registrati</a>
+            <div class="form-links" id="form-links">
+                <a href="register.php" id="register-link">Non hai un account? Registrati</a>
                 <a href="reset_password.php">Password dimenticata?</a>
             </div>
         </form>
@@ -160,9 +189,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     document.addEventListener('DOMContentLoaded', function() {
         const typeOptions = document.querySelectorAll('.type-option');
         const tipoInput = document.getElementById('tipo-input');
-
-        // Imposta utente come default
-        document.querySelector('.type-option[data-type="utente"]').classList.add('selected');
+        const loginForm = document.getElementById('login-form');
+        const userTypeSelection = document.querySelector('.user-type-selection');
+        const selectionPrompt = document.querySelector('.selection-prompt');
+        const backButton = document.getElementById('back-to-selection');
+        const registerLink = document.getElementById('register-link');
 
         typeOptions.forEach(option => {
             option.addEventListener('click', function() {
@@ -172,9 +203,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 // Aggiungi la classe selected all'opzione selezionata
                 this.classList.add('selected');
 
+                // Nascondi la selezione e mostra il form
+                userTypeSelection.style.display = 'none';
+                selectionPrompt.style.display = 'none';
+                loginForm.style.display = 'flex';
+
                 // Aggiorna il valore dell'input hidden
-                tipoInput.value = this.getAttribute('data-type');
+                const userType = this.getAttribute('data-type');
+                tipoInput.value = userType;
+
+                // Aggiorna il link di registrazione in base al tipo
+                if (userType === 'barbiere') {
+                    registerLink.href = 'register_barbiere.php';
+                } else {
+                    registerLink.href = 'register.php';
+                }
             });
+        });
+
+        // Gestisci il clic sul pulsante "Torna alla selezione"
+        backButton.addEventListener('click', function() {
+            loginForm.style.display = 'none';
+            userTypeSelection.style.display = 'flex';
+            selectionPrompt.style.display = 'flex';
         });
     });
 </script>

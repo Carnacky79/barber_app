@@ -1,16 +1,16 @@
 <?php
 // config.php - File di configurazione
-define('DB_SERVER', 'sql.easybarber.it');
+/*define('DB_SERVER', 'sql.easybarber.it');
 define('DB_USERNAME', 'easybarb97941');
 define('DB_PASSWORD', 'easy51841');
 define('DB_NAME', 'easybarb97941');
-define('SITE_URL', 'http://easybarber.it'); // Modificare con l'URL del tuo sito
+define('SITE_URL', 'http://easybarber.it'); */
 
-//define('DB_SERVER', 'localhost');
-//define('DB_USERNAME', 'root');
-//define('DB_PASSWORD', 'password');
-//define('DB_NAME', 'barber_booking');
-//define('SITE_URL', 'http://easyapp.local.com'); // Modificare con l'URL del tuo sito
+define('DB_SERVER', 'localhost');
+define('DB_USERNAME', 'root');
+define('DB_PASSWORD', 'password');
+define('DB_NAME', 'barber_booking');
+define('SITE_URL', 'http://easyapp.local.com'); // Modificare con l'URL del tuo sito
 
 // Connessione al database
 function connectDB() {

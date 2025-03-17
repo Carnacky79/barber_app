@@ -173,6 +173,7 @@ switch ($step) {
 
         // Verifica che il barbiere sia aperto in quel giorno
         $stmt = $conn->prepare("SELECT * FROM orari_apertura WHERE barbiere_id = ? AND giorno = ? AND aperto = 1");
+
         $stmt->bind_param("is", $user['barbiere_default'], $giorno);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -208,6 +209,8 @@ switch ($step) {
             $disponibilita_operatore[] = $row;
         }
 
+        //var_dump($disponibilita_operatore);
+
         if (count($disponibilita_operatore) == 0) {
             $error = "L'operatore selezionato non è disponibile in questo giorno.";
             $step = 3;
@@ -228,49 +231,63 @@ switch ($step) {
             $appuntamenti_esistenti[] = $row;
         }
 
+        //var_dump($appuntamenti_esistenti);
+
+         file_put_contents('debug.log', "Orario apertura: " . print_r($orario_apertura, true) . "\n", FILE_APPEND);
+ file_put_contents('debug.log', "Operatore disponibilità: " . print_r($disponibilita_operatore, true) . "\n", FILE_APPEND);
+ file_put_contents('debug.log', "Appuntamenti esistenti: " . print_r($appuntamenti_esistenti, true) . "\n", FILE_APPEND);
+
+
         // Calcola gli slot disponibili (incrementi di 15 minuti)
         $slot_disponibili = [];
         $durata_servizio = $servizio['durata_minuti'];
 
         foreach ($disponibilita_operatore as $disponibilita) {
-            $ora_inizio = strtotime($disponibilita['ora_inizio']);
-            $ora_fine = strtotime($disponibilita['ora_fine']);
+            // Converti gli orari in timestamp per i calcoli
+            $ora_inizio_turno = strtotime($disponibilita['ora_inizio']);
+            $ora_fine_turno = strtotime($disponibilita['ora_fine']);
+            $ora_chiusura = strtotime($orario_apertura['ora_chiusura']);
 
-            // Assicurati che l'orario di fine sia almeno la durata del servizio prima dell'orario di chiusura
-            $ora_fine = min($ora_fine, strtotime($orario_apertura['ora_chiusura']) - ($durata_servizio * 60));
+            // Assicurati che l'orario di fine rispetti la chiusura del negozio
+            $ora_fine_turno = min($ora_fine_turno, $ora_chiusura);
 
-            // Incrementa di 15 minuti
-            while ($ora_inizio <= $ora_fine - ($durata_servizio * 60)) {
-                $slot_inizio = date('H:i:s', $ora_inizio);
-                $slot_fine = date('H:i:s', $ora_inizio + ($durata_servizio * 60));
+            // Genera slot di 15 minuti all'interno del turno dell'operatore
+            for ($slot_time = $ora_inizio_turno; $slot_time <= $ora_fine_turno - ($durata_servizio * 60); $slot_time += 15 * 60) {
+                $slot_end_time = $slot_time + ($durata_servizio * 60);
 
-                // Verifica se lo slot si sovrappone a un appuntamento esistente
-                $disponibile = true;
+                // Verifica la disponibilità (nessuna sovrapposizione con altri appuntamenti)
+                $slot_disponibile = true;
+
                 foreach ($appuntamenti_esistenti as $appuntamento) {
-                    if (
-                        ($slot_inizio < $appuntamento['ora_fine'] && $slot_fine > $appuntamento['ora_inizio']) ||
-                        ($slot_inizio >= $appuntamento['ora_inizio'] && $slot_inizio < $appuntamento['ora_fine']) ||
-                        ($slot_fine > $appuntamento['ora_inizio'] && $slot_fine <= $appuntamento['ora_fine'])
-                    ) {
-                        $disponibile = false;
+                    $app_start = strtotime($appuntamento['ora_inizio']);
+                    $app_end = strtotime($appuntamento['ora_fine']);
+
+                    // Se c'è sovrapposizione, lo slot non è disponibile
+                    if (($slot_time < $app_end) && ($slot_end_time > $app_start)) {
+                        $slot_disponibile = false;
                         break;
                     }
                 }
 
-                if ($disponibile) {
+                // Se lo slot è disponibile, aggiungilo alla lista
+                if ($slot_disponibile) {
                     $slot_disponibili[] = [
-                        'inizio' => $slot_inizio,
-                        'fine' => $slot_fine,
-                        'inizio_formattato' => date('H:i', $ora_inizio),
-                        'fine_formattata' => date('H:i', $ora_inizio + ($durata_servizio * 60))
+                        'inizio' => date('H:i:s', $slot_time),
+                        'fine' => date('H:i:s', $slot_end_time),
+                        'inizio_formattato' => date('H:i', $slot_time),
+                        'fine_formattata' => date('H:i', $slot_end_time)
                     ];
                 }
-
-                $ora_inizio += 15 * 60; // 15 minuti in secondi
             }
         }
 
+// Debug del numero di slot trovati
+file_put_contents('debug.log', "Numero di slot trovati: " . count($slot_disponibili) . "\n", FILE_APPEND);
+
         if (count($slot_disponibili) == 0) {
+            // Debug: verifica le condizioni di base
+            file_put_contents('debug.log', "Nessuno slot trovato. Barbiere: {$user['barbiere_default']}, Operatore: {$operatore_id}, Data: {$data}\n", FILE_APPEND);
+
             $error = "Non ci sono orari disponibili per la data selezionata.";
             $step = 3;
         }
@@ -621,8 +638,12 @@ $conn->close();
                         html += '</tr><tr>';
                     }
 
+                    // const currentDate = new Date(year, month, day);
+                    // const formattedDate = currentDate.toISOString().split('T')[0];
+                    // Modifica questa parte del codice
                     const currentDate = new Date(year, month, day);
-                    const formattedDate = currentDate.toISOString().split('T')[0];
+// Usa il metodo toLocaleDateString() per evitare problemi di fuso orario
+                    const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const now = new Date();
                     now.setHours(0, 0, 0, 0);
 
