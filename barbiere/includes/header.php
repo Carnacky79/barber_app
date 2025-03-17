@@ -281,7 +281,7 @@ if (isBarbiere()) {
     </style>
     <script src="<?php echo (isBarbiere() ? '../' : ''); ?>js/notifications.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="../css/mobile-fixes.css">
 </head>
 <body>
 <header>
